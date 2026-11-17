@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en" data-theme="luxury">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turium AI Knowledge Inbox - Decisions Made</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, li, td, th, .badge, .label) { overflow-wrap: anywhere; }
+  body { background: var(--color-base-100); color: var(--color-base-content); }
+</style>
+</head>
+<body>
+<main class="mx-auto max-w-4xl p-4 lg:p-8 space-y-6">
+
+<header class="space-y-2">
+  <div class="badge badge-primary badge-soft">Turium · AI Knowledge Inbox</div>
+  <h1 class="text-3xl font-bold">Decisions Made</h1>
+  <p class="opacity-80">Every question asked during the requirements interview (Rounds 1-3), the decision taken, and why. Written so the reasoning can be reused in the README and defended in the interview. Companion document: <code>BUILD_PLAN.html</code>.</p>
+</header>
+
+<section class="stats stats-vertical sm:stats-horizontal shadow w-full">
+  <div class="stat"><div class="stat-title">Decisions</div><div class="stat-value">21</div><div class="stat-desc">incl. explicit non-goals</div></div>
+  <div class="stat"><div class="stat-title">Rounds</div><div class="stat-value">3</div><div class="stat-desc">interview rounds</div></div>
+  <div class="stat"><div class="stat-title">Open items</div><div class="stat-value">2</div><div class="stat-desc">verified in step 0 of plan</div></div>
+</section>
+
+<div class="alert alert-warning alert-soft" role="alert"><span><b>Open items (not decisions yet):</b> (1) <code>fastembed</code> 0.9.1 lists <code>nomic-ai/nomic-embed-text-v1.5</code> (768-dim, 8192 tokens, ~0.52 GB; quantized -Q ~0.13 GB) - supported; still confirm it actually loads on the target Windows machine in step 0. Fallback is <code>bge-base-en-v1.5</code>. (2) Pick a current, cheap OpenRouter chat model ID at build time; it stays an env var.</span></div>
+
+<h2 class="text-2xl font-semibold pt-4">A. Stack &amp; providers</h2>
+<div id="sec-a" class="space-y-4"></div>
+<h2 class="text-2xl font-semibold pt-4">B. Data &amp; retrieval</h2>
+<div id="sec-b" class="space-y-4"></div>
+<h2 class="text-2xl font-semibold pt-4">C. API, errors &amp; observability</h2>
+<div id="sec-c" class="space-y-4"></div>
+<h2 class="text-2xl font-semibold pt-4">D. Frontend, limits &amp; scope</h2>
+<div id="sec-d" class="space-y-4"></div>
+
+</main>
+
+<script>
+// [section, id, round, title, decision, why, rejected, tradeoff]
+const D = [
+['a','D1','R1','Backend framework','Python + FastAPI with Pydantic validation.',
+ 'Brief allows Node/Express or FastAPI. FastAPI gives typed request/response models, automatic validation errors and OpenAPI docs for free, and Python has the best embedding ecosystem. User already has a FastAPI project to borrow patterns from.',
+ 'Node + Express (TS or JS): one language across the repo, but weaker validation story and the embedding tooling is thinner.',
+ 'Two languages in the repo (Python + TypeScript).'],
+['a','D2','R1','Frontend stack','Vite + React + TypeScript + TanStack Query + Tailwind + shadcn/ui.',
+ 'Vite is the standard fast React setup. TanStack Query is a defensible "reasonable state management" answer: it handles server state, caching and polling (item status) without a global store. shadcn/ui gives accessible components without writing CSS from scratch.',
+ 'Plain hooks + fetch (more manual polling/caching code); Redux/Zustand (unneeded for server-state-only app).',
+ 'More setup than plain React; brief says clarity over beauty so we keep the UI small.'],
+['a','D3','R1-2','LLM provider','OpenRouter through the OpenAI-compatible SDK (base_url override). Model ID is an environment variable.',
+ 'User asked for OpenRouter: one key, many models, cheap at this scale. Standard SDK keeps the code provider-neutral and model swaps are a config change.',
+ 'Direct OpenAI/Anthropic (single vendor lock-in); local Ollama (heavier reviewer setup).',
+ 'Dependency on a third-party gateway; free-tier models can be rate-limited, so default is a cheap paid model.'],
+['a','D4','R2-3','Embedding model & runtime','Local nomic-embed-text-v1.5 via fastembed (ONNX). Fallback: bge-base-en-v1.5. Vectors stored with model name + dimension. Uses search_document: / search_query: prefixes.',
+ 'User asked for a model better than bge-small that handles both short notes and long URL text. Nomic gives strong retrieval and an 8192-token window, so chunk sizes are forgiving; ONNX via fastembed avoids the heavy torch install. Local means no per-call cost and works offline once downloaded. Storing model name and dim next to each vector lets us detect a model swap and re-embed instead of silently mixing vectors.',
+ 'bge-small + sentence-transformers (user\'s existing project: lighter model but weakest retrieval, torch install); bge-base (safe fallback, 512-token cap); hosted embeddings (OpenRouter support unverified, adds cost and network dependency).',
+ 'Larger model download (hundreds of MB) and slower first start; not verified on Windows yet (open item 1). Interview defense: embeddings are high-volume and deterministic (every chunk and every query), so a local open-weight model gives zero per-call cost, no rate limits, private notes never leave the machine, and no vendor deprecation forcing a re-embed; hosted LLM is used only for low-volume answer generation. Frontier chat models are not embedding models; hosted embedding APIs (OpenAI, Voyage) could score higher but are not worth the cost/privacy/latency tradeoff at this scale. OpenRouter embeddings support was not verified. Embedder sits behind an interface so a hosted model is a config change; production would use a separate embedding worker/service and re-embed via the stored model name and dim. Not benchmarked against bge-base on this data - compare on a small labelled question set.'],
+['b','D5','R1-2','Vector store','SQLite only: items, chunks and float32 vectors (BLOB), exact cosine similarity with NumPy brute force, behind a VectorStore interface.',
+ 'At this scale (hundreds to low thousands of chunks) an exact scan takes about a millisecond, so an index buys nothing. One file means one source of truth with no sync problem between two stores. Normalised vectors make cosine a dot product (same technique as the user\'s bulk search). The interface makes the production swap a one-file change.',
+ 'SQLite + Chroma (two stores to keep consistent; Chroma in the user\'s project rebuilds on every start); sqlite-vec (native extension risk on Windows); FAISS (more plumbing); pgvector (infra the brief warns against).',
+ 'O(n) scan and all-vectors-in-RAM. Fine to roughly 50-100k chunks; beyond that move to pgvector/HNSW. Goes in README "what breaks at scale".'],
+['b','D6','R2','Ingestion flow','POST /ingest saves the item, returns 202 with {id, status:"pending"}. A FastAPI background task fetches, chunks, embeds and sets status ready/failed. UI polls GET /items.',
+ 'Fetching a URL and embedding are slow and can fail; blocking the request is a weak design. The brief lists async as a tested skill. Background tasks give real async behaviour with zero infra.',
+ 'Synchronous ingest (blocks, poor scale story); Celery/RQ + Redis (infrastructure theatre the brief warns against).',
+ 'In-process tasks are lost on restart: on startup we mark stranded "processing" items failed with a clear message. Production answer: a durable queue + worker.'],
+['b','D7','R2','Answer delivery','Single JSON response: answer text with [n] citation markers plus sources[] (item id, title, URL, snippet, score).',
+ 'Simple to validate and test, and satisfies "answer with cited sources". Citations map 1:1 to numbered context blocks sent to the LLM.',
+ 'SSE streaming (nicer UX but more complexity in API, errors and frontend inside a 6-12 hour budget).',
+ 'User waits for the full answer; acceptable for a short, single-turn answer.'],
+['b','D8','R2','Chunking strategy','Recursive splitter: paragraph, then sentence, then word boundaries. About 500-token chunks with about 50-token overlap. Short notes become a single chunk.',
+ 'Intentional and simple: respects natural boundaries so chunks stay coherent, overlap protects facts that straddle a boundary, and 500 tokens fits comfortably inside the embedding model window while keeping snippets readable as citations. Implementation is adapted from the user\'s Vizuara notebook (recursive_chunk_text) with five fixes: keep paragraph newlines (the notebook flattens them), merge small adjacent pieces up to the target size, add overlap, add a word-level fallback for over-long sentences, and replace NLTK punkt with a regex sentence splitter (no runtime download).',
+ 'Fixed window (cuts mid-sentence); semantic chunking via embedding similarity (extra embedding cost and complexity, marginal gain at this scale).',
+ 'Token counts are estimated; very long unstructured text falls back to word splits. Overlap increases stored chunks by roughly 10%.'],
+['b','D9','R2','URL fetching & extraction','httpx + trafilatura for readable text. 10 s timeout, 2 MB cap, http(s) only, max 3 redirects, private/loopback/link-local IPs blocked after DNS resolution (SSRF guard). Extracted text capped at 100,000 characters.',
+ 'Server-side fetching of user-supplied URLs is a classic SSRF vector, so the guard is part of the design, not an extra. trafilatura strips navigation and ads, which would otherwise pollute embeddings.',
+ 'BeautifulSoup naive strip (noisy content); Playwright headless browser (handles JS pages but heavy and overkill).',
+ 'JavaScript-rendered pages and paywalled pages yield little text; item is marked failed with a readable reason. Known limitation for README.'],
+['b','D10','R2','Chat model strategy','Environment-configurable model ID, defaulting to a cheap fast model chosen at build time.',
+ 'Avoids hard-coding a model that may be deprecated; free-tier-only was rejected because rate limits can break a live demo.',
+ 'Free-tier only; hard-coded model.','None significant.'],
+['b','D11','R3','Query & RAG behaviour','Single-turn. top_k default 5 (1-10). A similarity threshold (env var, tuned after testing): if no chunk passes, return answered=false with a fixed message and do not call the LLM. System prompt: answer ONLY from the numbered context, cite [n], say when unsure, treat context as untrusted data.',
+ 'Prevents hallucinated answers with fake citations, saves LLM cost on irrelevant questions, and the "untrusted context" instruction is a basic mitigation for prompt injection from fetched web pages.',
+ 'Always call the LLM (may answer from general knowledge); multi-turn chat history (state and prompt-size handling beyond the brief).',
+ 'A strict threshold can refuse borderline questions; the threshold is configurable and tuned on a small test set.'],
+['b','D12','R3','Data model & DB access','Plain sqlite3 (stdlib) with a thin repository layer, UUID4 string IDs, WAL mode, per-request connections. Tables: items(id, type, title, source_url, raw_content, status, error, created_at, updated_at) and chunks(id, item_id FK cascade, chunk_index, text, embedding BLOB, embedding_model, embedding_dim).',
+ 'For two tables, explicit SQL is clearer than an ORM, BLOB vectors are plain bytes, and there is no extra dependency. Sync routes and background tasks run in the threadpool, so async drivers add nothing. UUIDs avoid guessable IDs and ease a later DB swap. Raw content is stored as the brief requires.',
+ 'SQLAlchemy Core/ORM or SQLModel (ceremony for two tables); aiosqlite (CPU-bound work gains nothing); integer IDs; UUIDv7/ULID (needs a library; created_at already orders results).',
+ 'SQLite allows a single writer at a time; fine for a single-user app. Production: Postgres.'],
+['c','D13','R3','Ingest request shape & duplicates','Discriminated body {type:"note"|"url", content|url, title?}. Re-ingesting an already-saved URL returns 409 with the existing item id.',
+ 'A discriminated union makes validation strict and error messages precise. Rejecting duplicate URLs stops the same page from appearing several times in retrieval results.',
+ 'Allow duplicates (pollutes results); replace on re-ingest (extra logic about ids and stale chunks).',
+ 'Refreshing a changed page needs delete + re-add; DELETE was not selected (see D21).'],
+['c','D14','R3','Endpoints','POST /ingest, GET /items (limit/offset + ?status filter, newest first), GET /items/{id} (raw content + chunks), POST /query, GET /health (db + embedder readiness).',
+ 'The three required endpoints plus the smallest set that makes the system debuggable: item detail shows exactly what was stored and chunked, health exposes readiness, pagination keeps the list bounded.',
+ 'Bare minimum three endpoints (less debuggable).','Slightly larger API surface to test.'],
+['c','D15','R3','Failure behaviour & status codes','Item is saved first; fetch/embed failures set status=failed with a readable error shown in the UI. Codes: 202, 200, 404, 409, 413, 422, 502 (upstream URL/LLM failure), 503 (embedder not ready), 500. One error shape everywhere: {error:{code,message,details,request_id}}.',
+ 'Nothing is silently lost, the user sees why a URL failed, and clients get one predictable error contract. 502/503 distinguish upstream and readiness problems from our own bugs.',
+ 'Reject synchronously before saving (slow ingest, contradicts async design).','Failed items stay in the list until handled; acceptable and visible.'],
+['c','D16','R3','Structured logging','structlog JSON logs. Request-ID middleware: X-Request-ID echoed in response headers and error bodies. Log ingest stages and query timings (embed ms, search ms, LLM ms, top scores).',
+ 'Directly serves the debuggability criterion: any user-visible error can be traced by request ID, and per-stage timings show where latency lives.',
+ 'Stdlib JSON formatter (more boilerplate); plain text logs (not structured).','One extra dependency.'],
+['c','D17','R3','Project layout & tooling','Everything lives inside one root directory, turium-ai-knowledge-inbox/, with backend/ (app/{api/routes, schemas, services, adapters, repositories}, config, logging_config, db, tests) and frontend/ as sibling folders, plus README.md and DECISIONS.html at the root. uv + pyproject.toml, pydantic-settings, pytest + httpx TestClient.',
+ 'Layers map to the brief\'s code-quality criteria: routes only translate HTTP, services hold logic, adapters wrap external things (embedder, LLM, fetcher, chunker), repositories own SQL. No file does two jobs. Improves on the user\'s earlier project, where main.py held business logic and module-level globals.',
+ 'pip + requirements.txt (slower, no lockfile); flatter layout (invites god-file criticism).','More files and folders than a flat layout.'],
+['d','D18','R3','Frontend layout','Single page, two columns. Left: add note/URL form (tabs) + items list with status badges, polling every 2 s only while any item is pending/processing. Right: ask box + answer with clickable [n] chips and source cards. Hooks: useItems, useIngest, useAsk.',
+ 'Everything the brief lists is visible at once; clarity over beauty. Conditional polling avoids needless requests. Each hook owns one server interaction.',
+ 'Tabbed pages (more clicks); chat UI (implies history we are not building).','Two columns need a responsive stack on narrow screens.'],
+['d','D19','R3','Limits & safety','Note max 20,000 chars; question max 1,000 chars; URL limits per D9; CORS restricted to the frontend origin. All values in config.',
+ 'Bounds cost, memory and abuse surface while still accepting realistic articles and notes. Config-driven so they are easy to justify and change.',
+ 'Tighter demo caps (reject real articles); looser limits (higher risk/cost).','Very long documents are truncated; documented.'],
+['d','D20','R2','Deliverables','README with tradeoffs, scale limits and production changes; backend unit tests (chunker, vector store, API with mocked LLM and embedder); this DECISIONS.html.',
+ 'The brief grades tradeoff awareness and code quality, so the reasoning is a deliverable. Tests focus on pure, deterministic parts plus API contract with external services mocked.',
+ 'Frontend tests, e2e tests (time budget).','No automated UI tests; manual verification checklist in plan.'],
+['d','D21','R2-3','Explicit non-goals','Not building: Docker/Compose, DELETE /items/{id}, Makefile scripts, streaming, multi-turn chat, auth, re-ranking, hybrid search.',
+ 'Not selected by the user, and several (Docker, Celery, auth) are what the brief calls infra theatre or bloat. Each is listed in the README under "production changes" so omission reads as a conscious tradeoff.',
+ 'n/a','Reviewer must run backend and frontend manually; instructions in README.'],
+];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+for (const [sec,id,rnd,title,decision,why,rejected,trade] of D) {
+  const el = document.createElement('article');
+  el.className = 'card card-border bg-base-200';
+  el.innerHTML = `<div class="card-body gap-3">
+    <div class="flex flex-wrap items-center gap-2"><span class="badge badge-primary">${id}</span><h3 class="card-title">${esc(title)}</h3><span class="badge badge-ghost ml-auto">${esc(rnd)}</span></div>
+    <div class="alert alert-success alert-soft"><span><b>Decision:</b> ${esc(decision)}</span></div>
+    <p><b>Why:</b> ${esc(why)}</p>
+    <div class="grid gap-3 md:grid-cols-2">
+      <div class="p-3 rounded-box bg-base-100"><div class="text-xs uppercase opacity-60 mb-1">Rejected</div><p class="text-sm">${esc(rejected)}</p></div>
+      <div class="p-3 rounded-box bg-base-100"><div class="text-xs uppercase opacity-60 mb-1">Tradeoff accepted</div><p class="text-sm">${esc(trade)}</p></div>
+    </div></div>`;
+  document.getElementById('sec-' + sec).appendChild(el);
+}
+</script>
+</body>
+</html>
