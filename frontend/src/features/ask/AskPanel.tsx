@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useAsk } from '@/api/hooks'
 import { ErrorNotice } from '@/components/ErrorNotice'
 import { scrollBehavior } from '@/lib/motion'
+import { innerScrollRoot } from '@/lib/scrollRoot'
 import { AnswerSkeleton } from './AnswerSkeleton'
 import { AnswerView } from './AnswerView'
 import { AskForm } from './AskForm'
@@ -35,8 +36,11 @@ export function AskPanel({ onGoToAdd, onGoToSaved }: AskPanelProps) {
     if (!ask.isPending) return
     const results = resultsRef.current
     if (!results) return
-    const top = results.getBoundingClientRect().top
-    if (top > RESULTS_NEAR_TOP_MAX || top < RESULTS_NEAR_TOP_MIN) {
+    // Inside the card body (desktop) measure from its top edge; on phones from the page header.
+    const root = innerScrollRoot(results)
+    const top = results.getBoundingClientRect().top - (root?.getBoundingClientRect().top ?? 0)
+    const [min, max] = root ? [0, 24] : [RESULTS_NEAR_TOP_MIN, RESULTS_NEAR_TOP_MAX]
+    if (top > max || top < min) {
       results.scrollIntoView({ behavior: scrollBehavior(), block: 'start' })
     }
   }, [ask.isPending])
@@ -66,8 +70,8 @@ export function AskPanel({ onGoToAdd, onGoToSaved }: AskPanelProps) {
       <div
         ref={resultsRef}
         className={cn(
-          'border-t border-border-subtle pt-5 empty:hidden',
-          needsRoom && 'min-h-[min(calc(100dvh-8rem),40rem)]',
+          'border-t border-border-subtle pt-5 -scroll-mt-3 empty:hidden',
+          needsRoom && 'min-h-[calc(100cqh+2.5rem)]',
         )}
       >
         {ask.isPending && <AnswerSkeleton />}

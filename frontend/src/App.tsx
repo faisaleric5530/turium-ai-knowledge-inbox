@@ -7,26 +7,34 @@ import { PanelHeading, TabBar, TabPanel } from '@/features/layout/AppTabs'
 import { Header } from '@/features/layout/Header'
 import { useHashTab } from '@/features/layout/useHashTab'
 import type { TabId } from '@/features/layout/useHashTab'
+import { SCROLL_ROOT_ATTR, readScroll, writeScroll } from '@/lib/scrollRoot'
 
 function App() {
   const [tab, selectTab] = useHashTab()
 
-  // One document scroll serves both tabs, so remember each tab's position and restore it.
+  // One scroll area serves all tabs (the card body on desktop, the page on phones), so
+  // remember each tab's position and restore it.
   const scrollByTab = useRef<Record<TabId, number>>({ add: 0, saved: 0, ask: 0 })
   const shownTab = useRef<TabId>(tab)
   const firstRender = useRef(true)
 
   useEffect(() => {
     const remember = () => {
-      scrollByTab.current[shownTab.current] = window.scrollY
+      scrollByTab.current[shownTab.current] = readScroll()
     }
+    // Scroll events do not bubble, so listen on the card body as well as the window.
+    const root = document.querySelector<HTMLElement>(`[${SCROLL_ROOT_ATTR}]`)
     window.addEventListener('scroll', remember, { passive: true })
-    return () => window.removeEventListener('scroll', remember)
+    root?.addEventListener('scroll', remember, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', remember)
+      root?.removeEventListener('scroll', remember)
+    }
   }, [])
 
   // Capture the position at the moment of selection, before the panels swap.
   function handleSelect(next: TabId) {
-    scrollByTab.current[shownTab.current] = window.scrollY
+    scrollByTab.current[shownTab.current] = readScroll()
     selectTab(next)
   }
 
@@ -40,7 +48,7 @@ function App() {
     }
     if (shownTab.current === tab) return
     shownTab.current = tab
-    window.scrollTo(0, scrollByTab.current[tab])
+    writeScroll(scrollByTab.current[tab])
     document.getElementById(`heading-${tab}`)?.focus({ preventScroll: true })
   }, [tab])
 
@@ -65,12 +73,17 @@ function App() {
         tabIndex={-1}
         className="mx-auto w-full max-w-[44rem] flex-1 px-4 py-6 outline-none sm:px-0 sm:py-10"
       >
-        <Card>
-          <div className="border-b border-border-subtle p-4 sm:px-6 sm:py-5">
+        {/* Standard size: the card keeps one height (it follows the window, within limits)
+            whatever the tab or amount of data; its body scrolls when content is taller. */}
+        <Card className="flex h-[clamp(26rem,calc(100dvh-7rem),47rem)] flex-col sm:h-[clamp(34rem,calc(100dvh-9rem),47rem)]">
+          <div className="shrink-0 border-b border-border-subtle p-4 sm:px-6 sm:py-5">
             <TabBar active={tab} onSelect={handleSelect} />
           </div>
 
-          <div className="p-4 sm:p-6">
+          <div
+            {...{ [SCROLL_ROOT_ATTR]: '' }}
+            className="relative min-h-0 flex-1 overflow-y-auto p-4 [container-type:size] [scrollbar-gutter:stable] [scrollbar-width:thin] sm:p-6"
+          >
             <TabPanel id="add" active={tab === 'add'}>
               <PanelHeading id="add" title="Add" />
               <IngestForm onViewSaved={() => handleSelect('saved')} />

@@ -132,12 +132,14 @@ status colors (ready green, processing amber, failed red) always carry an icon a
 
 Structure: sticky header (logo + "Turium AI Knowledge Inbox") above ONE centered card with three pill tabs.
 - **Add**: Note | Web page form, character counter, loading state, inline errors, "View in Saved" after saving.
-- **Saved**: item rows with status badges and a **View** button. View opens a native `<dialog>` modal (`Modal.tsx`: focus trap,
+- **Saved**: items **5 per page** (Previous/Next, pinned pager; opening the tab starts on page 1) with status badges and a **View** button. View opens a native `<dialog>` modal (`Modal.tsx`: focus trap,
   Esc/backdrop/close, focus returns to the button, scroll lock) loaded from `GET /items/{id}`, with a pinned header and two inner
   tabs, **Text** (full content + Copy) and **Chunks (N)** (exactly what is searchable). Processing items refresh until ready.
 - **Ask**: compact question box with the Ask button **below** it; on submit the page scrolls so the answer is under the
   header. Answer text has clickable `[n]` chips; sources are master-detail (a tile per source + one detail panel with
   snippet, link and "Open full item"), so answer + sources fit one 1280x720 screen without page scroll.
+- The card has ONE standard height on every tab and data size (`clamp(26rem, 100dvh-7rem, 47rem)`, larger from `sm`); its body
+  scrolls inside it (`[data-scroll-root]`, helpers in `lib/scrollRoot.ts`), so scroll logic targets that element, not the window.
 - Routing is the URL hash (`#/add`, `#/saved`, `#/ask`; old `#/inbox` redirects). All panels stay mounted (hidden) so
   drafts, the last answer and scroll position survive tab switches. Keyboard: arrows/Home/End on tabs, skip link, aria-live.
 - **`GET /items` is called only while the Saved tab is active** (zero calls on load/reload/switching on Add or Ask);

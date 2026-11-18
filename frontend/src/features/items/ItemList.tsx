@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowRight, Library } from 'lucide-react'
-import { useItems } from '@/api/hooks'
+import { ITEMS_PAGE_SIZE, useItems } from '@/api/hooks'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorNotice } from '@/components/ErrorNotice'
+import { Pagination } from '@/components/Pagination'
 import { SectionLabel } from '@/components/SectionLabel'
 import { Button } from '@/components/ui/button'
+import { scrollBehavior } from '@/lib/motion'
+import { innerScrollRoot } from '@/lib/scrollRoot'
 import { ItemRow } from './ItemRow'
 import { ItemViewModal } from './ItemViewModal'
 
@@ -33,14 +36,35 @@ interface ItemListProps {
 
 /** Everything saved so far, with a View button that opens the item's text and data. */
 export function ItemList({ active, onGoToAdd }: ItemListProps) {
-  const { data, isPending, error, refetch, isFetching } = useItems(active)
+  const [page, setPage] = useState(0)
+  const { data, isPending, error, refetch, isFetching, isPlaceholderData } = useItems(active, page)
   const [viewingId, setViewingId] = useState<string>()
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // Opening the Saved tab always starts on page 1, where the newest items are.
+  const [wasActive, setWasActive] = useState(active)
+  if (active !== wasActive) {
+    setWasActive(active)
+    if (active) setPage(0)
+  }
+
+  // If the total shrinks below the current page (e.g. after a restart), step back to the last page.
+  const lastPage = data ? Math.max(0, Math.ceil(data.total / ITEMS_PAGE_SIZE) - 1) : 0
+  if (data && !isPlaceholderData && page > lastPage) setPage(lastPage)
+
+  function changePage(next: number) {
+    setPage(next)
+    // A new page starts at the top of the card body.
+    const root = innerScrollRoot(sectionRef.current)
+    if (root) root.scrollTo({ top: 0, behavior: scrollBehavior() })
+    else sectionRef.current?.scrollIntoView({ block: 'start', behavior: scrollBehavior() })
+  }
 
   // Look the item up in the live list so the header stays fresh while it is polled.
   const viewing = data?.items.find((item) => item.id === viewingId)
 
   return (
-    <section aria-labelledby="saved-heading" className="space-y-1">
+    <section ref={sectionRef} aria-labelledby="saved-heading" className="space-y-1">
       <SectionLabel
         id="saved-heading"
         aside={data ? `${data.total} ${data.total === 1 ? 'item' : 'items'}` : undefined}
@@ -71,11 +95,25 @@ export function ItemList({ active, onGoToAdd }: ItemListProps) {
       )}
 
       {data && data.items.length > 0 && (
-        <ul className="divide-y divide-border-subtle">
+        <ul
+          className="divide-y divide-border-subtle transition-opacity duration-150 data-[stale=true]:opacity-60"
+          data-stale={isPlaceholderData}
+        >
           {data.items.map((item) => (
             <ItemRow key={item.id} item={item} onView={(picked) => setViewingId(picked.id)} />
           ))}
         </ul>
+      )}
+
+      {data && (
+        <Pagination
+          page={page}
+          pageSize={ITEMS_PAGE_SIZE}
+          total={data.total}
+          onPageChange={changePage}
+          busy={isPlaceholderData}
+          label="Saved items"
+        />
       )}
 
       <ItemViewModal

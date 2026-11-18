@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type { ApiError } from './client'
 import type {
@@ -11,6 +11,9 @@ import type {
 } from './types'
 
 const POLL_INTERVAL_MS = 2000
+
+/** Saved items shown per page. */
+export const ITEMS_PAGE_SIZE = 4
 
 export const itemsKey = ['items'] as const
 
@@ -27,14 +30,16 @@ function hasActiveItems(data: ItemList | undefined): boolean {
  * a disabled query makes no request, no poll and no refocus/reconnect refetch.
  * Opening the tab turns it on, and because the data is always stale (staleTime 0) it
  * fetches immediately (cached rows show instantly, then update). While enabled it polls
- * every 2s, but only if something is still pending or processing.
+ * every 2s, but only if something is still pending or processing on the visible page.
+ * `page` is zero-based; the previous page stays on screen while the next one loads.
  */
-export function useItems(enabled: boolean) {
+export function useItems(enabled: boolean, page = 0) {
   return useQuery<ItemList, ApiError>({
-    queryKey: itemsKey,
-    queryFn: () => api.listItems(),
+    queryKey: [...itemsKey, { page }],
+    queryFn: () => api.listItems(ITEMS_PAGE_SIZE, page * ITEMS_PAGE_SIZE),
     enabled,
     staleTime: 0,
+    placeholderData: keepPreviousData,
     refetchInterval: (query) =>
       enabled && hasActiveItems(query.state.data) ? POLL_INTERVAL_MS : false,
   })
