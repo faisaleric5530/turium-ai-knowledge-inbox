@@ -5,9 +5,6 @@ Save short notes and URLs, then ask questions over them. Answers come from a sim
 - **Backend:** Python, FastAPI, SQLite, local embeddings (`nomic-embed-text-v1.5` via fastembed/ONNX), OpenRouter for the answer LLM.
 - **Frontend:** Vite, React, TypeScript, TanStack Query, Tailwind, shadcn/ui.
 
-Run it: see **Quick start** below.
-Why each choice was made: see **[spec/DECISIONS.html](spec/DECISIONS.html)**. Implementation plan: **[spec/BUILD_PLAN.html](spec/BUILD_PLAN.html)**.
-
 ## Quick start
 
 ```bash
@@ -50,9 +47,19 @@ POST /query ──► embed question ─► cosine search ─► drop chunks bel
 | `POST /query` | `{question,top_k?}` → `{answer, sources[{index,item_id,title,source_url,snippet,score}], model, answered}` |
 | `GET /health` | DB and embedder readiness (503 while not ready). |
 
-Logging is switchable with `API_LOGGING` in `backend/.env`: `true` prints every write request (POST/PUT/PATCH/DELETE, e.g. `POST /ingest`, `POST /query`) and its processing steps (ingest stages, retrieval scores, LLM timing) as JSON lines on the terminal, while reads such as `GET /items` and `/health` are not logged; `false` (default) prints only warnings and errors. Note content is never logged.
+All errors share one body: `{"error": {"code", "message", "details"?, "request_id"}}`. Every response carries an `X-Request-ID` header, and the JSON logs carry the same id.
 
-Errors always have one shape: `{"error": {"code", "message", "details"?, "request_id"}}`. Status codes: 202, 200, 404, 409 (duplicate URL), 413 (too large), 422 (validation), 502 (LLM upstream failure), 503 (embedder not ready / LLM not configured), 500. Every response has an `X-Request-ID` header; logs are JSON and carry the same id.
+| Status | Error code | Meaning |
+|---|---|---|
+| 200 | - | OK |
+| 202 | - | Accepted: item saved and queued for processing |
+| 404 | `not_found` | Unknown item or route |
+| 409 | `duplicate_url` | URL already saved (response includes the existing item id) |
+| 413 | `payload_too_large` | Note or question exceeds its length limit |
+| 422 | `validation_error` | Invalid request body or query parameters (per-field `details`) |
+| 502 | `upstream_error` | Answer model failed, throttled or rejected the key |
+| 503 | `service_unavailable` | Embedding model still loading, or answer model not configured |
+| 500 | `internal_error` | Unexpected server error (quote the request id) |
 
 ### Code layout
 
@@ -66,7 +73,7 @@ backend/app/
   services/          ingestion, retrieval, answering (the logic)
   adapters/          chunker, embedder, url_fetcher, llm (external concerns)
   repositories/      items_repo (SQL), vector_store (VectorStore interface + SQLite impl)
-backend/tests/       69 tests; fakes for embedder, LLM and URL fetcher
+backend/tests/       82 tests; fakes for embedder, LLM and URL fetcher
 frontend/src/        api/ (client + hooks), features/{ingest,items,ask}, components/
 ```
 
@@ -105,13 +112,9 @@ frontend/src/        api/ (client + hooks), features/{ingest,items,ask}, compone
 - Hybrid search (BM25 + vectors) with re-ranking; streaming answers; conversation history.
 - Metrics and tracing on top of the structured logs; containerised deployment.
 
-## Not included (conscious scope cuts)
-
-Docker, delete endpoint, streaming, multi-turn chat, auth, re-ranking, frontend automated tests. Each is covered above as a production change.
-
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q     # 69 tests, no network or model download needed
+cd backend && uv run pytest -q     # 82 tests, no network or model download needed
 cd frontend && npm run lint && npm run build
 ```
