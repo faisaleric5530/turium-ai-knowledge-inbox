@@ -1,0 +1,150 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/montserrat";
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+
+/*
+ * Design tokens. Structure follows HikmahAI_FE (warm page, light surface cards,
+ * 1.5px borders, soft layered shadows, Montserrat / Poppins / Inter); the palette
+ * is the Turium brand: navy #22396F on cream #FCF1D0 plus tints derived from them.
+ */
+@theme inline {
+    --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-heading: 'Montserrat Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-surface-hover: var(--surface-hover);
+    --color-input-bg: var(--input-bg);
+    --color-input-bg-focus: var(--input-bg-focus);
+    --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary-light: var(--primary-light);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-placeholder: var(--placeholder);
+    --color-border: var(--border);
+    --color-border-subtle: var(--border-subtle);
+    --color-border-hover: var(--border-hover);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-navy-50: var(--navy-50);
+    --color-navy-100: var(--navy-100);
+    --color-success: var(--success);
+    --color-success-bg: var(--success-bg);
+    --color-warning: var(--warning);
+    --color-warning-bg: var(--warning-bg);
+    --color-destructive: var(--destructive);
+    --color-destructive-bg: var(--destructive-bg);
+
+    --shadow-sm: 0 1px 3px rgb(34 57 111 / 0.05);
+    --shadow-md: 0 4px 16px rgb(34 57 111 / 0.07);
+    --shadow-lg: 0 8px 32px rgb(34 57 111 / 0.09);
+    --shadow-primary: 0 4px 16px rgb(34 57 111 / 0.25);
+}
+
+/* Light theme only. Every text/background pair is >= 4.5:1; input borders are >= 3:1. */
+:root {
+    color-scheme: light;
+    --background: #FCF1D0;
+    --foreground: #22396F;
+    --card: #FFFBEC;
+    --card-foreground: #22396F;
+    --surface-hover: #FBF2D2;
+    --input-bg: #F8ECC8;
+    --input-bg-focus: #FFFDF4;
+    --primary: #22396F;
+    --primary-hover: #2D4A8F;
+    --primary-foreground: #FCF1D0;
+    --primary-light: #E8ECF6;
+    --muted-foreground: #4E5E82;
+    --placeholder: #55648A;
+    --border: #D6D1BF;
+    --border-subtle: #E7E3D2;
+    --border-hover: #BDB8A6;
+    --input: #7683A3;
+    --ring: #22396F;
+    --navy-50: #E8ECF6;
+    --navy-100: #C9D1E6;
+    --success: #17693F;
+    --success-bg: #E3F1E8;
+    --warning: #8A5A00;
+    --warning-bg: #FBE9B7;
+    --destructive: #B3261E;
+    --destructive-bg: #FBE0DC;
+    --shimmer-base: #F3E7C2;
+    --shimmer-highlight: #FBF2D6;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
+    font-size: 16px;
+    scroll-padding-top: 4.5rem; /* clears the sticky header */
+    overflow-anchor: none; /* tab panels restore scroll explicitly; no browser re-anchoring */
+  }
+  body {
+    @apply bg-background text-foreground min-h-dvh antialiased;
+    line-height: 1.55;
+  }
+  h1, h2, h3 {
+    @apply font-heading font-bold;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Loading placeholder, same shimmer idea as the reference app's skeletons. */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--shimmer-base) 25%,
+    var(--shimmer-highlight) 50%,
+    var(--shimmer-base) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Modal (native <dialog>): fade + slight rise on open; transform/opacity only. */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+dialog.modal-dialog[open] {
+  animation: modal-in 180ms ease-out;
+}
+dialog.modal-dialog[open]::backdrop {
+  animation: backdrop-in 180ms ease-out;
+}
